@@ -1,0 +1,46 @@
+
+contract BinaryOption {
+    int betPrice;
+    int rabinPubKey;
+    int timestamp;
+    Ripemd160 pubKeyHashA;
+    Ripemd160 pubKeyHashB;
+
+    function hash(bytes x) : bytes {
+        // expand into 512 bit hash
+        bytes hx = sha256(x);
+        int idx = len(hx) / 2;
+        return sha256(hx[: idx]) + sha256(hx[idx :]);
+    }
+
+    public function unlock(SigHashPreimage txPreimage, int sig, bytes msg, bytes padding, int outAmount) {
+
+        // check preimage
+        require(Tx.checkPreimage(txPreimage));
+
+        // verify rabin signature
+        int h = Utils.fromLEUnsigned(this.hash(msg + padding));
+        require((sig * sig) % this.rabinPubKey == h % this.rabinPubKey);
+
+        // first 8 bytes
+        int price = Utils.fromLEUnsigned(msg[0 : 8]);
+        // the next 8 bytes
+        int timestamp = Utils.fromLEUnsigned(msg[8 : 16]);
+        // check the time
+        require(timestamp == this.timestamp);
+
+        // check price
+        bytes outputScript = b'';
+        if (price >= this.betPrice) {
+            outputScript = Utils.buildPublicKeyHashScript(this.pubKeyHashA);
+        }
+        else {
+            outputScript = Utils.buildPublicKeyHashScript(this.pubKeyHashB);
+        }
+
+        // check the output is the right winner
+        bytes outputHash = hash256(Utils.buildOutput(outputScript, outAmount));
+        bytes outputHash2 = SigHash.hashOutputs(txPreimage);
+        require(outputHash == outputHash2);
+    }
+}

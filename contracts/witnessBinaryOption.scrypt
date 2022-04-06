@@ -1,0 +1,37 @@
+import "rabin.scrypt";
+
+contract WitnessBinaryOption {
+  bytes symbol;
+  int decimal;
+  int betPrice;
+  int matureTime;
+  RabinPubKey witnessPubKey;
+  PubKeyHash pubKeyHashA;
+  PubKeyHash pubKeyHashB;
+
+  public function unlock(SigHashPreimage txPreimage, int price, int unlockTime, int outAmount, RabinSig rabinSig) {
+
+    // check preimage
+    require(Tx.checkPreimage(txPreimage));
+
+    require(unlockTime >= this.matureTime);
+    // require(unlockTime <= this.matureTime + 3600);
+
+
+    //symbol+price(BigInt 32bytes)+decimal(UInt8)+timestamp(UInt32)
+    bytes msg = this.symbol + num2bin(price, 32) + num2bin(this.decimal, 1) + num2bin(unlockTime, 4);
+    require(RabinSignature.checkSig(msg, rabinSig, this.witnessPubKey));
+
+    // check price
+    bytes outputScript = b'';
+    if (price >= this.betPrice) {
+      outputScript = Utils.buildPublicKeyHashScript(this.pubKeyHashA);
+    } else {
+      outputScript = Utils.buildPublicKeyHashScript(this.pubKeyHashB);
+    }
+
+    // check the output is the right winner
+    bytes output = Utils.buildOutput(outputScript, outAmount);
+    require(hash256(output) == SigHash.hashOutputs(txPreimage));
+  }
+}

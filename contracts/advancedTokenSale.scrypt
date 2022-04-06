@@ -1,0 +1,61 @@
+
+
+/**
+ * AdvancedTokenSale
+ *
+ * Demonstrates atomic swapping of tokens for satoshis: sales made to a buyer's (public key)
+ * Uses TxAdvanced, with external funding (additional input) and a change output
+ *
+ * Use with: getFundedtxPreimage() and unlockFundedScriptTx()
+ */
+contract AdvancedTokenSale {
+    // satoshis / token
+    int price;
+    static const int DataLen = 1;
+
+    constructor(int price) {
+        this.price = price;
+    }
+
+    public function buy(SigHashPreimage txPreimage, PubKeyHash changePKH, int changeSats, bytes buyer, int numTokens) {
+        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+        // this ensures the preimage is for the current tx
+        require(Tx.checkPreimageSigHashType(txPreimage, sigHashType));
+
+        // we're using only one byte for the number of tokens purchased
+        require(0 < numTokens && numTokens < 128);
+
+        bytes scriptCode = SigHash.scriptCode(txPreimage);
+        int scriptLen = len(scriptCode);
+
+        int oldBalance = SigHash.value(txPreimage);
+        int newBalance = oldBalance + numTokens * this.price;
+
+        // data after the OP_RETURN is a growing list of sales entries:
+        //     PubKeyA,numTokensPurchased
+        //     PubKeyB,numTokensPurchased
+        bytes newSalesEntry = buyer + num2bin(numTokens, DataLen);
+
+        // expect the latest sales entry to be appended to the previous script/state
+
+        int newStateLen = len(newSalesEntry);
+        bytes scriptCode_ = scriptCode + num2bin(newStateLen, DataLen) + newSalesEntry;
+
+        // output: amount + scriptlen + script
+        bytes counterOutput = Utils.buildOutput(scriptCode_, newBalance);
+
+        // Expect the additional CHANGE output
+        bytes changeScript = Utils.buildPublicKeyHashScript(changePKH);
+        // output: amount + scriptlen + script
+        bytes changeOutput = Utils.buildOutput(changeScript, changeSats);
+
+        // expect exactly two outputs
+        Sha256 hashOutputs = hash256(counterOutput + changeOutput);
+
+        // ensure output matches what we expect:
+        //     - amount/balance reflects funds received from sale
+        //     - output script is the same as scriptCode, with additional sales entry
+        //     - expected change output script is there
+        require(hashOutputs == SigHash.hashOutputs(txPreimage));
+    }
+}

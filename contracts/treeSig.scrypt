@@ -1,0 +1,32 @@
+import "merklePath.scrypt";
+
+// tree signatures: Merkle tree-based multisig
+contract TreeSig {
+
+    // M out of N multisig
+    static const int M = 3;
+    
+    const Sha256 merkleRoot;
+
+    public function main(PubKey[M] pubKeys, Sig[M] sigs, MerkleProof merkleproof) {
+        // validate public keys are from the merkle tree
+        require(MerklePath.calMerkleRoot(pubKeys2Leaf(pubKeys), merkleproof) == this.merkleRoot);
+
+        // check if all M signatures are valid
+        bool allMatch = true;
+        loop (M) : i {
+            allMatch = allMatch && checkSig(sigs[i], pubKeys[i]);
+        }
+        require(allMatch);
+    }
+
+    // map public keys to a leaf
+    static function pubKeys2Leaf(PubKey[M] pubKeys) : Sha256 {
+        bytes leaf = b'';
+
+        loop (M) : i {
+            leaf += pubKeys[i];
+        }
+        return sha256(leaf);
+    }
+}

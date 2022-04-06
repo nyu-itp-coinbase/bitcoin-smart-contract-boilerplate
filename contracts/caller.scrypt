@@ -1,0 +1,36 @@
+/**
+* a contract calling quadratic equation contract
+*/
+import "txUtil.scrypt";
+import "callee.scrypt";
+
+contract Caller {
+    static const int N = 2;
+    static const int calleeContractInputIndex = 1;
+    // hash of the callee contract, i.e., its locking script
+    PubKeyHash calleeContractHash;
+
+    public function call(Coeff co, bytes prevouts, bytes calleeContractTx,
+        bytes outputScript, int amount, SigHashPreimage txPreimage) {
+        require(Tx.checkPreimage(txPreimage));
+
+        require(TxUtil.verifyContractByHash(
+                    prevouts,
+                    calleeContractInputIndex,
+                    calleeContractTx,
+                    this.calleeContractHash,
+                    txPreimage));
+
+        int l = len(outputScript);
+        int a = unpack(outputScript[l - 4 * N : l - 3 * N]);
+        int b = unpack(outputScript[l - 3 * N : l - 2 * N]);
+        int c = unpack(outputScript[l - 2 * N : l - N]);
+        require(co == { a, b, c });
+        int x = unpack(outputScript[l - N :]);
+        // ------>> x must be a root for the following quadatic equition: no need to double check
+        // require(a * x * x + b * x + c == 0);
+
+        bytes output = Utils.buildOutput(outputScript, amount);
+        require(hash256(output) == SigHash.hashOutputs(txPreimage));
+    }
+}
